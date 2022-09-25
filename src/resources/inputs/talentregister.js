@@ -35,6 +35,7 @@ let questiontoask = [
         name: 'age',
         step:6
     },
+    
     {
         question: 'Create Strong Password',
         type: 'password',
@@ -47,12 +48,7 @@ let questiontoask = [
         name: 'password2',
         step:8
     },
-    {
-        question: 'Confirm your Password',
-        type: 'password',
-        name: 'password2',
-        step:9
-    },
+   
     
 
    

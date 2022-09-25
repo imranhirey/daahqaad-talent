@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef,useState } from 'react';
 import { Alert, Button, Container, Form, InputGroup, Row, Spinner } from 'react-bootstrap';
 import questiontoask from '../resources/inputs/talentregister';
@@ -7,12 +8,17 @@ import getUserGeolocationDetails from '../resources/detectlocation';
 import contrycodes from '../resources/inputs/countrycodes';
 import countrycodes from '../resources/inputs/countrycodes';
 import { emailchecker, passwordchecker, validatenumber } from '../resources/inputs/checkers';
+import { registeruser } from '../handlers/registration';
+import axios from 'axios';
+import api from '../api';
+import Otprequired from './modals/Otpmodal';
 
 
 function Register(props) {
     let [curentstep, setcurentstep] = React.useState(1);
     let [loading, setloading] = React.useState(false);
     let [typing, settyping] = React.useState(false);
+    let [phoneotprequired, setphoneotprequired] = React.useState(false);
 
     let [error, seterror] = React.useState('');
     let inputka=useRef(null)
@@ -45,7 +51,8 @@ console.log(curentstep)
           [e?.target?.name]: e?.target?.value
       })
   }
-  let handlenext = () => {
+  let handlenext = async() => {
+   
       settyping(false)
 
     let clean=()=>{
@@ -55,14 +62,48 @@ console.log(curentstep)
       inputka.current.focus()
       
     }
-    if (inputka.current.name === 'email') {
-      let isvalid=emailchecker(inputka.current.value) 
+    seterror('')
+    if (inputka.current.props?.id === 'countries') {
+
+       let isvalid=information.country[0]!=='Russia'
+    
       if (!isvalid) {
-        seterror('Email is not valid')
+        seterror('sorry we do not allow russian users to register in our platform beacsue of the sanctions ') 
         clean()
         return;
       }
       else{
+        setcurentstep(prev=>prev + 1)
+      }
+    }
+    if (inputka.current.name === 'email') {
+      setloading(true)
+       let res=await api.isemailalreadyregistered(information.email)
+       if (res.data.status!='success')  {
+        seterror('someting went wrong please try again later') 
+        setloading(false)
+        clean()
+        return;
+      }
+      
+      if (res.data.message!=false)  {
+        seterror('email already exist') 
+        setloading(false)
+        clean()
+
+        return;
+      }
+      let isvalid=emailchecker(inputka.current.value) 
+      if (!isvalid) {
+        seterror('Email is not valid')
+        setloading(false)
+        clean()
+        return;
+      }
+      else{
+        setloading(false)
+        let res=await api.sendotpbyemail(information.email)
+        console.log(res)
         setcurentstep(prev=>prev + 1)
       }
     }
@@ -78,6 +119,8 @@ console.log(curentstep)
       }
     }
     if (inputka.current.name === 'phone') {
+      let res= await api.sendotpbynumber(information.phone)
+     setphoneotprequired(true)
       let isvalid=validatenumber(inputka.current.value)
       if (!isvalid.isValid) {
         seterror('Phone number is not valid')
@@ -86,7 +129,7 @@ console.log(curentstep)
       }
       else{
         setinformation({...information,phone:isvalid.phoneNumber})
-        setcurentstep(prev=>prev + 1)
+       
       }
     }
      if (inputka.current.name === 'password1') {
@@ -112,8 +155,10 @@ console.log(curentstep)
       }
     }
     if (inputka.current.name === 'otp') {
-      let isvalid=inputka.current.value==8888
-      if (!isvalid) {
+      
+      let isvalid=await api.checkotp(information.email,inputka.current.value)
+      console.log(isvalid.data.status)
+      if (isvalid.data.status=='error') {
         seterror('otp is not valid please check your email and try again')
         clean()
         return;
@@ -133,20 +178,7 @@ console.log(curentstep)
         setcurentstep(prev=>prev + 1)
       }
     }
-    if (inputka.current.name == 'country') {
-      alert(inputka.current.value)
-      // dont allow russian users
-      let isvalid=inputka.current.value!=='Russia'
-      alert(isvalid)
-      if (!isvalid) {
-        seterror('sorry we do not allow russian users to register in our platform beacsue of the sanctions ') 
-        clean()
-        return;
-      }
-      else{
-        setcurentstep(prev=>prev + 1)
-      }
-    }
+   
    
 
 
@@ -168,6 +200,7 @@ console.log(curentstep)
 
 
        }}>
+        {phoneotprequired && <Otprequired setcurentstep={setcurentstep} information={information} popupmessage='we have sent 6 digit cod to your number please enter here to verify our number' popuptitle='Verify your number' show={phoneotprequired} setshow={setphoneotprequired} />}
          <Row style={{
                    
 
@@ -226,19 +259,19 @@ console.log(curentstep)
         height:'50px',
 
       }}
-      id="basic-example "
+      id="countries"
       
       onChange={(e)=>{
         console.log('jkjh',e[0])
         // set information coutry
         setinformation({
           ...information,
-          country: e[0]
+          country: e
         })
-        console.log('hi',information.country)
+        console.log('hi',information.country[0])
       }}
       options={options}
-      selected={information.coutry}
+      selected={information.country}
       aria-label="Large"
           aria-describedby="inputGroup-sizing-sm"
           placeholder={item.name=='otp'?'enter the otp':item.question}
@@ -248,13 +281,9 @@ console.log(curentstep)
           required
           name={item.name}
           defaultSelected={information.country}
-          onFocus={()=>{
-            setinformation({
-              ...information,
-              country: ''
-            })
+          
 
-          }}
+      
     />
       </>:<Form.Control
           aria-label="Large"
@@ -265,6 +294,7 @@ console.log(curentstep)
           required
           name={item.name}
           onChange={handlechange}
+          value={information[item.name]}
           style={{
             height:'50px',
     
@@ -273,17 +303,39 @@ console.log(curentstep)
           
         />}
      
-    {curentstep!==questiontoask.length &&  <Button type='submit'  style={{
+  <Button type='submit'  style={{
             marginTop:'12px'
     
-          }} onClick={handlenext} disabled={loading} >{loading?'checking ...':'Next'} </Button>}
+          }} onClick={handlenext} disabled={curentstep==8?true:false} >{loading?'checking ...':'Next'} </Button>
+          {curentstep!==1 && <Button onClick={()=>{
+            setcurentstep(prev=>prev - 1)
+          }} variant='link'>Go back</Button>}
       {curentstep===questiontoask.length && <Button style={{
             marginTop:'12px'
     
-          }} type='submit' variant='success' onClick={()=>{
-             handlenext()
+          }} type='submit' variant='success' onClick={async()=>{
+            let isvalid=inputka.current.value===information.password1
+           if (!isvalid) {
+             seterror('your passwords do not match')
+             inputka.current.value=''
+             inputka.current.focus()
+             return;
+           }
+           else
+           {
+            let res=await registeruser(information)
+            console.log(res)
+            if (res){
+              alert('great you are now registered')
 
-      }} disabled={loading} >{loading?'submitting ...':'submit'}</Button>}
+            }
+            else{
+              alert('something went wrong please try again')
+            }
+            
+           }
+
+      }}  >{loading?'submitting ...':'submit'}</Button>}
       <Alert style={{
           marginTop: '10px',
 
